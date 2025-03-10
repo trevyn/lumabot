@@ -1,0 +1,21 @@
+[package]
+name = "luma-calendar-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A CLI application that fetches, processes, and displays Luma calendar events"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["blocking"] }
+ical = "0.7"
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4"] }
+clap = { version = "4.3", features = ["derive"] }
+colored = "2.0"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tokio-postgres = "0.7"
+uuid = { version = "1.0", features = ["v4", "serde"] }

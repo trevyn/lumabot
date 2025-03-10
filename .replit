@@ -1,0 +1,51 @@
+modules = ["nodejs-20", "postgresql-16", "rust"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Rust CLI Build and Run"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "run-rust-cli"
+
+[[workflows.workflow]]
+name = "Rust CLI Build and Run"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cargo run"
+
+[[workflows.workflow]]
+name = "run-rust-cli"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd /home/runner/workspace && cargo run"
+
+[deployment]
+run = ["sh", "-c", "cargo run"]
