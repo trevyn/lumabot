@@ -179,9 +179,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                         
                         // Extract slug from URL
                         if let Some(slug) = enriched_event.extract_slug() {
-                            // Get a clean slug for logging
-                            let clean_slug = models::Event::clean_string(&slug);
-                            println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", enriched_event.summary, clean_slug).blue());
+                            // The slug is already clean from extract_slug
+                            println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", enriched_event.summary, slug).blue());
                             
                             let api_id = rt.block_on(async {
                                 api_client.lookup_event_id(&slug).await
@@ -194,8 +193,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     success_count += 1;
                                 },
                                 Err(e) => {
-                                    let clean_slug = models::Event::clean_string(&slug);
-                                    println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
+                                    // Slug is already clean
+                                    println!("{}", format!("API lookup failed for '{}': {}", slug, e).red());
                                     error_count += 1;
                                 }
                             }
@@ -306,8 +305,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     println!("{}", "This API ID can be used to access additional event details.".yellow());
                 },
                 Err(e) => {
-                    let clean_slug = models::Event::clean_string(slug);
-                    println!("{}", format!("❌ API lookup failed for '{}': {}", clean_slug, e).red());
+                    println!("{}", format!("❌ API lookup failed for '{}': {}", slug, e).red());
                 },
             }
         }
@@ -375,6 +373,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                         }
                                     },
                                     Err(e) => {
+                                        // specific_slug needs cleaning since it's user input
                                         let clean_slug = models::Event::clean_string(specific_slug);
                                         println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
                                     },
@@ -394,8 +393,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     
                                     // Extract slug from URL
                                     if let Some(slug) = event.extract_slug() {
-                                        let clean_slug = models::Event::clean_string(&slug);
-                                        println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", event.summary, clean_slug).blue());
+                                        // Slug is already clean from extract_slug
+                                        println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", event.summary, slug).blue());
                                         
                                         let api_id = rt.block_on(async {
                                             api_client.lookup_event_id(&slug).await
@@ -416,8 +415,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                                 }
                                             },
                                             Err(e) => {
-                                                let clean_slug = models::Event::clean_string(&slug);
-                                                println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
+                                                // Slug is already clean
+                                                println!("{}", format!("API lookup failed for '{}': {}", slug, e).red());
                                                 error_count += 1;
                                             }
                                         }

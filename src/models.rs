@@ -105,9 +105,13 @@ impl Event {
     
     /// Utility function to clean any string by removing whitespace and newlines
     pub fn clean_string(input: &str) -> String {
+        // Process all types of newlines and escaped sequences
         input.replace("\n", "")
              .replace("\r", "")
              .replace("\t", "")
+             .replace("\\n", "") // Handle escaped newlines
+             .replace("\\r", "") // Handle escaped carriage returns
+             .replace("\\t", "") // Handle escaped tabs
              .trim()
              .to_string()
     }
@@ -122,7 +126,8 @@ impl Event {
                 // Try to extract the slug after the last slash
                 if let Some(slug) = clean_url.split('/').last() {
                     if !slug.is_empty() {
-                        return Some(slug.to_string());
+                        // Make sure the extracted slug is also cleaned
+                        return Some(Self::clean_string(slug));
                     }
                 }
                 
@@ -130,7 +135,8 @@ impl Event {
                 if clean_url.contains("/e/") {
                     if let Some(slug) = clean_url.split("/e/").last() {
                         if !slug.is_empty() {
-                            return Some(slug.to_string());
+                            // Make sure the extracted slug is also cleaned
+                            return Some(Self::clean_string(slug));
                         }
                     }
                 }

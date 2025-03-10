@@ -151,9 +151,8 @@ impl Database {
             let clean_url = match &event.url {
                 Some(url) => {
                     // Use the clean_string utility function for consistent cleaning
-                    let mut cleaned = crate::models::Event::clean_string(url);
-                    // Also handle escaped characters that might have come from serialization
-                    cleaned = cleaned.replace("\\n", "").replace("\\r", "");
+                    // (now handles escaped characters internally)
+                    let cleaned = crate::models::Event::clean_string(url);
                     Some(cleaned)
                 },
                 None => None
