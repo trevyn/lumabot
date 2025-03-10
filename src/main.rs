@@ -135,12 +135,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     let mut new_event = e.clone();
                     // Clean the URL if it exists or add a default one
                     if let Some(url) = &e.url {
-                        // Thoroughly clean existing URL - remove ALL whitespace and newlines
-                        let clean_url = url.replace("\n", "")
-                                           .replace("\r", "")
-                                           .replace("\t", "")
-                                           .trim()
-                                           .to_string();
+                        // Thoroughly clean existing URL
+                        let clean_url = models::Event::clean_string(url);
                         new_event.url = Some(clean_url);
                     } else {
                         // Add a default URL pattern: https://lu.ma/e/{event_uid}
@@ -183,8 +179,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                         
                         // Extract slug from URL
                         if let Some(slug) = enriched_event.extract_slug() {
-                            // Make sure the slug is clean in the log message
-                            let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                            // Get a clean slug for logging
+                            let clean_slug = models::Event::clean_string(&slug);
                             println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", enriched_event.summary, clean_slug).blue());
                             
                             let api_id = rt.block_on(async {
@@ -198,7 +194,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     success_count += 1;
                                 },
                                 Err(e) => {
-                                    let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                    let clean_slug = models::Event::clean_string(&slug);
                                     println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
                                     error_count += 1;
                                 }
@@ -310,7 +306,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     println!("{}", "This API ID can be used to access additional event details.".yellow());
                 },
                 Err(e) => {
-                    let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                    let clean_slug = models::Event::clean_string(slug);
                     println!("{}", format!("❌ API lookup failed for '{}': {}", clean_slug, e).red());
                 },
             }
@@ -379,7 +375,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                         }
                                     },
                                     Err(e) => {
-                                        let clean_slug = specific_slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                        let clean_slug = models::Event::clean_string(specific_slug);
                                         println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
                                     },
                                 }
@@ -398,7 +394,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     
                                     // Extract slug from URL
                                     if let Some(slug) = event.extract_slug() {
-                                        let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                        let clean_slug = models::Event::clean_string(&slug);
                                         println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", event.summary, clean_slug).blue());
                                         
                                         let api_id = rt.block_on(async {
@@ -420,7 +416,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                                 }
                                             },
                                             Err(e) => {
-                                                let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                                let clean_slug = models::Event::clean_string(&slug);
                                                 println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
                                                 error_count += 1;
                                             }

@@ -103,17 +103,21 @@ impl Event {
         }
     }
     
-    // Extract the slug from a Luma URL if available
+    /// Utility function to clean any string by removing whitespace and newlines
+    pub fn clean_string(input: &str) -> String {
+        input.replace("\n", "")
+             .replace("\r", "")
+             .replace("\t", "")
+             .trim()
+             .to_string()
+    }
+    
+    /// Extract the slug from a Luma URL if available
     pub fn extract_slug(&self) -> Option<String> {
         if let Some(url) = &self.url {
-            // Look for patterns like https://lu.ma/e/abcdef123 or https://lu.ma/abcdef123
-            // First, clean the entire URL thoroughly
-            let clean_url = url.replace("\n", "")
-                              .replace("\r", "")
-                              .replace("\t", "")
-                              .trim()
-                              .to_string();
-                              
+            // Clean the URL first
+            let clean_url = Self::clean_string(url);
+            
             if clean_url.contains("lu.ma") {
                 // Try to extract the slug after the last slash
                 if let Some(slug) = clean_url.split('/').last() {

@@ -150,13 +150,10 @@ impl Database {
             // Clean URL if it exists - thoroughly clean any URL to ensure no newlines or invalid characters
             let clean_url = match &event.url {
                 Some(url) => {
-                    // More thorough cleaning to handle any potentially problematic characters
-                    let cleaned = url.replace('\n', "")
-                                    .replace('\r', "")
-                                    .replace("\\n", "")
-                                    .replace("\\r", "")
-                                    .trim()
-                                    .to_string();
+                    // Use the clean_string utility function for consistent cleaning
+                    let mut cleaned = crate::models::Event::clean_string(url);
+                    // Also handle escaped characters that might have come from serialization
+                    cleaned = cleaned.replace("\\n", "").replace("\\r", "");
                     Some(cleaned)
                 },
                 None => None

@@ -45,11 +45,7 @@ impl LumaApi {
         })?;
         
         // Clean the slug thoroughly before using it in the URL
-        let clean_slug = slug.replace("\n", "")
-                          .replace("\r", "")
-                          .replace("\t", "")
-                          .trim()
-                          .to_string();
+        let clean_slug = Event::clean_string(slug);
         
         let url = format!("{}{}", API_ENDPOINT, clean_slug);
         
