@@ -112,6 +112,15 @@ impl Database {
         // Use client if available, otherwise get a new connection from pool
         if let Some(ref client) = self.client {
             // If we have a client already, use it
+            // Clean URL if it exists - force cleaned strings to avoid any newlines
+            let clean_url = match &event.url {
+                Some(url) => {
+                    let cleaned = url.replace("\n", "").replace("\r", "").trim().to_string();
+                    Some(cleaned)
+                },
+                None => None
+            };
+            
             rt.block_on(async {
                 client
                     .execute(
@@ -124,7 +133,7 @@ impl Database {
                             &event.location,
                             &event.start,
                             &event.end,
-                            &event.url,
+                            &clean_url,
                             &event.event_uid,
                         ],
                     )
@@ -137,6 +146,15 @@ impl Database {
                 let client = self.pool.get().await
                     .map_err(|e| DatabaseError::ConnectionError(format!("Failed to get connection from pool: {}", e)))?;
                 
+                // Clean URL if it exists - force cleaned strings to avoid any newlines
+                let clean_url = match &event.url {
+                    Some(url) => {
+                        let cleaned = url.replace("\n", "").replace("\r", "").trim().to_string();
+                        Some(cleaned)
+                    },
+                    None => None
+                };
+                
                 client
                     .execute(
                         "INSERT INTO events (summary, description, location, start_time, end_time, url, event_uid)
@@ -148,7 +166,7 @@ impl Database {
                             &event.location,
                             &event.start,
                             &event.end,
-                            &event.url,
+                            &clean_url,
                             &event.event_uid,
                         ],
                     )
@@ -174,6 +192,15 @@ impl Database {
 
         let mut saved_count = 0;
         for event in events {
+            // Clean URL if it exists - force cleaned strings to avoid any newlines
+            let clean_url = match &event.url {
+                Some(url) => {
+                    let cleaned = url.replace("\n", "").replace("\r", "").trim().to_string();
+                    Some(cleaned)
+                },
+                None => None
+            };
+            
             let result = rt.block_on(async {
                 client
                     .execute(
@@ -186,7 +213,7 @@ impl Database {
                             &event.location,
                             &event.start,
                             &event.end,
-                            &event.url,
+                            &clean_url,
                             &event.event_uid,
                         ],
                     )
@@ -228,13 +255,17 @@ impl Database {
 
         let mut events = Vec::new();
         for row in rows {
+            // Get the URL and clean it if needed - ensure all newlines and carriage returns are removed
+            let url: Option<String> = row.get("url");
+            let cleaned_url = url.map(|u| u.replace("\n", "").replace("\r", "").trim().to_string());
+            
             events.push(Event::with_uid(
                 row.get("summary"),
                 row.get("description"),
                 row.get("location"),
                 row.get("start_time"),
                 row.get("end_time"),
-                row.get("url"),
+                cleaned_url,
                 row.get("event_uid"),
             ));
         }
@@ -274,13 +305,17 @@ impl Database {
 
         let mut events = Vec::new();
         for row in rows {
+            // Get the URL and clean it if needed - ensure all newlines and carriage returns are removed
+            let url: Option<String> = row.get("url");
+            let cleaned_url = url.map(|u| u.replace("\n", "").replace("\r", "").trim().to_string());
+            
             events.push(Event::with_uid(
                 row.get("summary"),
                 row.get("description"),
                 row.get("location"),
                 row.get("start_time"),
                 row.get("end_time"),
-                row.get("url"),
+                cleaned_url,
                 row.get("event_uid"),
             ));
         }
@@ -308,6 +343,28 @@ impl Database {
         .map_err(DatabaseError::QueryError)?;
 
         Ok(row.get::<_, i64>(0))
+    }
+    
+    /// Clears all events from the database
+    pub fn clear_all_events(&self) -> Result<u64, DatabaseError> {
+        let rt = Runtime::new().map_err(|e| {
+            DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e))
+        })?;
+
+        // Get a fresh connection from the pool
+        let client = rt.block_on(async {
+            self.pool.get().await
+                .map_err(|e| DatabaseError::ConnectionError(format!("Failed to get connection from pool: {}", e)))
+        })?;
+
+        let result = rt.block_on(async {
+            client
+                .execute("DELETE FROM events", &[])
+                .await
+        })
+        .map_err(DatabaseError::QueryError)?;
+
+        Ok(result)
     }
 }
 

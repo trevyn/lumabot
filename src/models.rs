@@ -81,6 +81,19 @@ impl Event {
     pub fn duration_minutes(&self) -> i64 {
         self.end.signed_duration_since(self.start).num_minutes()
     }
+    
+    // Update or set the URL for this event
+    #[allow(dead_code)]
+    pub fn with_url(mut self, url: Option<String>) -> Self {
+        self.url = url;
+        self
+    }
+    
+    // Get a default URL based on the event UID
+    #[allow(dead_code)]
+    pub fn default_url(&self) -> String {
+        format!("https://lu.ma/e/{}", self.event_uid)
+    }
 }
 
 impl PartialEq for Event {

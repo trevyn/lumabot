@@ -73,11 +73,64 @@ fn parse_calendar_events(calendar: &IcalCalendar) -> Result<Vec<Event>, Calendar
             .find(|p| p.name == "LOCATION")
             .and_then(|p| p.value.clone());
 
+        // Check for both URL and url property names (case sensitivity matters in iCal)
         let url = component
             .properties
             .iter()
-            .find(|p| p.name == "URL")
+            .find(|p| p.name == "URL" || p.name == "url")
             .and_then(|p| p.value.clone());
+        
+        // Clean up the URL if it exists
+        let url = if let Some(url_str) = url {
+            // Clean the URL by removing anything after Address: or newlines
+            let mut clean_url = url_str.trim().to_string();
+            
+            // Remove anything after Address: (case insensitive and with various formats)
+            for pattern in &["\n\nAddress:", "\nAddress:", "Address:", "\n\naddress:", "\naddress:", "address:"] {
+                if let Some(idx) = clean_url.to_lowercase().find(&pattern.to_lowercase()) {
+                    clean_url = clean_url[0..idx].trim().to_string();
+                    break;
+                }
+            }
+            
+            // Remove any newlines from the URL completely
+            clean_url = clean_url.replace('\n', "").trim().to_string();
+            
+            Some(clean_url)
+        } else {
+            // If URL is not found, try to look for it in DESCRIPTION
+            if let Some(desc) = &description {
+                // Try to extract a URL from the description
+                // This is a simple extraction that looks for http:// or https:// patterns
+                if let Some(start_idx) = desc.find("http") {
+                    // Find the end of the URL (whitespace, newline, or end of string)
+                    let substring = &desc[start_idx..];
+                    let end_idx = substring.find(|c: char| c.is_whitespace())
+                        .map(|pos| pos)
+                        .unwrap_or_else(|| substring.len());
+                    
+                    // Get just the URL portion and clean it
+                    let mut url_str = substring[0..end_idx].to_string();
+                    
+                    // Remove anything after Address: (case insensitive and with various formats)
+                    for pattern in &["\n\nAddress:", "\nAddress:", "Address:", "\n\naddress:", "\naddress:", "address:"] {
+                        if let Some(idx) = url_str.to_lowercase().find(&pattern.to_lowercase()) {
+                            url_str = url_str[0..idx].trim().to_string();
+                            break;
+                        }
+                    }
+                    
+                    // Remove any newlines from the URL completely
+                    url_str = url_str.replace('\n', "").trim().to_string();
+                    
+                    Some(url_str)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
 
         // Parse start and end times
         let start = component

@@ -189,7 +189,8 @@ fn display_event_list(events: &[&Event], verbose: bool) {
             }
             
             if let Some(url) = &event.url {
-                println!("  {}: {}", "URL".blue(), url);
+                let clean_url = url.replace("\n", "").replace("\r", "").trim().to_string();
+                println!("  {}: {}", "URL".blue(), clean_url);
             }
             
             if let Some(description) = &event.description {

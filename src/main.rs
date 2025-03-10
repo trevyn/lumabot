@@ -58,7 +58,19 @@ enum Commands {
         /// Show all events
         #[clap(long)]
         all: bool,
+        
+        /// Limit the number of events displayed
+        #[clap(short, long, default_value_t = 10)]
+        limit: usize,
+        
+        /// Show detailed information about events
+        #[clap(short, long)]
+        verbose: bool,
     },
+    
+    /// Clear all events from the database
+    #[clap(name = "clear")]
+    ClearDb,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,9 +100,37 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
         match database::connect_db() {
             Ok(db) => {
                 println!("{}", "Storing events in database...".blue());
-                match db.save_events(&events) {
-                    Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
-                    Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
+                
+                // Debug: Count events with URLs
+                let events_with_urls = events.iter().filter(|e| e.url.is_some()).count();
+                println!("{}", format!("Found {} events with URLs out of {}", events_with_urls, events.len()).yellow());
+                
+                // Add default URL to events that don't have one - Luma base URL and clean existing URLs
+                let events_with_clean_urls: Vec<_> = events.iter().map(|e| {
+                    let mut new_event = e.clone();
+                    // Clean the URL if it exists or add a default one
+                    if let Some(url) = &e.url {
+                        // Clean existing URL
+                        let clean_url = url.replace("\n", "").replace("\r", "").trim().to_string();
+                        new_event.url = Some(clean_url);
+                    } else {
+                        // Add a default URL pattern: https://lu.ma/e/{event_uid}
+                        let default_url = format!("https://lu.ma/e/{}", new_event.event_uid);
+                        new_event.url = Some(default_url);
+                    }
+                    new_event
+                }).collect();
+                
+                // First, clear the database to ensure we have clean data
+                match db.clear_all_events() {
+                    Ok(_) => {
+                        // Then save the events with clean URLs
+                        match db.save_events(&events_with_clean_urls) {
+                            Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
+                            Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
+                        }
+                    },
+                    Err(e) => println!("{}", format!("Failed to clear database: {}", e).red()),
                 }
             }
             Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
@@ -108,7 +148,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
         Some(Commands::Next { days }) => {
             display::display_upcoming_events(&events, *days, cli.limit, cli.verbose);
         }
-        Some(Commands::Database { all }) => {
+        Some(Commands::Database { all, limit, verbose }) => {
             match database::connect_db() {
                 Ok(db) => {
                     if *all {
@@ -119,7 +159,7 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     format!("Displaying all {} events from database", db_events.len())
                                         .blue()
                                 );
-                                display::display_events(&db_events, cli.limit, cli.verbose);
+                                display::display_events(&db_events, *limit, *verbose);
                             }
                             Err(e) => println!("{}", format!("Failed to fetch events: {}", e).red()),
                         }
@@ -134,6 +174,21 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                             Err(e) => {
                                 println!("{}", format!("Failed to count events: {}", e).red())
                             }
+                        }
+                    }
+                }
+                Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
+            }
+        }
+        Some(Commands::ClearDb) => {
+            match database::connect_db() {
+                Ok(db) => {
+                    match db.clear_all_events() {
+                        Ok(count) => {
+                            println!("{}", format!("Successfully cleared {} events from database", count).green());
+                        }
+                        Err(e) => {
+                            println!("{}", format!("Failed to clear database: {}", e).red());
                         }
                     }
                 }
