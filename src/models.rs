@@ -12,6 +12,7 @@ pub struct Event {
     pub end: DateTime<Utc>,
     pub url: Option<String>,
     pub event_uid: String,
+    pub api_id: Option<String>,
 }
 
 impl Event {
@@ -53,6 +54,7 @@ impl Event {
             end,
             url,
             event_uid,
+            api_id: None,
         }
     }
     
@@ -74,7 +76,62 @@ impl Event {
             end,
             url,
             event_uid,
+            api_id: None,
         }
+    }
+    
+    // Create an event with an existing UID and API ID
+    pub fn with_uid_and_api_id(
+        summary: String,
+        description: Option<String>,
+        location: Option<String>,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        url: Option<String>,
+        event_uid: String,
+        api_id: Option<String>,
+    ) -> Self {
+        Self {
+            summary,
+            description,
+            location,
+            start,
+            end,
+            url,
+            event_uid,
+            api_id,
+        }
+    }
+    
+    // Extract the slug from a Luma URL if available
+    pub fn extract_slug(&self) -> Option<String> {
+        if let Some(url) = &self.url {
+            // Look for patterns like https://lu.ma/e/abcdef123 or https://lu.ma/abcdef123
+            if url.contains("lu.ma") {
+                // Try to extract the slug after the last slash
+                if let Some(slug) = url.split('/').last() {
+                    if !slug.is_empty() {
+                        return Some(slug.to_string());
+                    }
+                }
+                
+                // For URLs with /e/ pattern
+                if url.contains("/e/") {
+                    if let Some(slug) = url.split("/e/").last() {
+                        if !slug.is_empty() {
+                            return Some(slug.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    // Set the API ID for this event
+    pub fn with_api_id(mut self, api_id: String) -> Self {
+        self.api_id = Some(api_id);
+        self
     }
     
     // Calculate the duration of the event in minutes

@@ -1,3 +1,4 @@
+mod api;
 mod calendar;
 mod database;
 mod display;
@@ -7,8 +8,8 @@ mod models;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use errors::CalendarError;
-
-//use tokio::runtime::Runtime;
+use tokio::runtime::Runtime;
+use api::LumaApi;
 
 use std::{process, time::Instant};
 
@@ -71,6 +72,18 @@ enum Commands {
     /// Clear all events from the database
     #[clap(name = "clear")]
     ClearDb,
+    
+    /// Enrich database events with API data
+    #[clap(name = "api")]
+    EnrichApi {
+        /// Limit to a specific number of events
+        #[clap(short, long)]
+        limit: Option<usize>,
+        
+        /// The slug to lookup (optional, if not provided, the command will attempt to enrich all events)
+        #[clap(short, long)]
+        slug: Option<String>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -121,16 +134,10 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     new_event
                 }).collect();
                 
-                // First, clear the database to ensure we have clean data
-                match db.clear_all_events() {
-                    Ok(_) => {
-                        // Then save the events with clean URLs
-                        match db.save_events(&events_with_clean_urls) {
-                            Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
-                            Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
-                        }
-                    },
-                    Err(e) => println!("{}", format!("Failed to clear database: {}", e).red()),
+                // Save events with clean URLs (using ON CONFLICT DO NOTHING to prevent duplicates)
+                match db.save_events(&events_with_clean_urls) {
+                    Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
+                    Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
                 }
             }
             Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
@@ -190,6 +197,128 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                         Err(e) => {
                             println!("{}", format!("Failed to clear database: {}", e).red());
                         }
+                    }
+                }
+                Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
+            }
+        }
+        Some(Commands::EnrichApi { limit, slug }) => {
+            // Set up Tokio runtime for async operations
+            let rt = Runtime::new().map_err(|e| {
+                CalendarError::ParseError(format!("Failed to create runtime: {}", e))
+            })?;
+            
+            // Create API client
+            let api_client = LumaApi::new();
+            
+            // Connect to database
+            match database::connect_db() {
+                Ok(db) => {
+                    // Fetch events from database
+                    match db.get_all_events() {
+                        Ok(mut db_events) => {
+                            println!("{}", format!("Found {} events in database", db_events.len()).blue());
+                            
+                            // Limit events if specified
+                            let events_to_process = match limit {
+                                Some(lim) => {
+                                    println!("{}", format!("Processing only the first {} events", lim).yellow());
+                                    db_events.truncate(*lim);
+                                    &mut db_events
+                                },
+                                None => &mut db_events,
+                            };
+                            
+                            // Process events
+                            if let Some(specific_slug) = slug {
+                                // Process a single event with the given slug
+                                println!("{}", format!("Looking up API ID for slug: {}", specific_slug).yellow());
+                                let api_id = rt.block_on(async {
+                                    api_client.lookup_event_id(&specific_slug).await
+                                });
+                                
+                                match api_id {
+                                    Ok(id) => {
+                                        println!("{}", format!("Found API ID: {}", id).green());
+                                        // Look for an event with this slug
+                                        let mut found = false;
+                                        for event in events_to_process.iter_mut() {
+                                            if let Some(url) = &event.url {
+                                                if url.contains(&*specific_slug) {
+                                                    println!("{}", format!("Updating event: {}", event.summary).green());
+                                                    event.api_id = Some(id.clone());
+                                                    found = true;
+                                                    
+                                                    // Save the updated event
+                                                    if let Err(e) = db.save_event(event) {
+                                                        println!("{}", format!("Failed to save event: {}", e).red());
+                                                    } else {
+                                                        println!("{}", "Event updated successfully".green());
+                                                    }
+                                                    
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        if !found {
+                                            println!("{}", format!("No event found with slug: {}", specific_slug).yellow());
+                                        }
+                                    },
+                                    Err(e) => println!("{}", format!("API lookup failed: {}", e).red()),
+                                }
+                            } else {
+                                // Process all events
+                                println!("{}", "Processing all events...".blue());
+                                let mut success_count = 0;
+                                let mut error_count = 0;
+                                
+                                for event in events_to_process.iter_mut() {
+                                    // Skip events that already have an API ID
+                                    if event.api_id.is_some() {
+                                        println!("{}", format!("Event already has API ID: {}", event.summary).yellow());
+                                        continue;
+                                    }
+                                    
+                                    // Extract slug from URL
+                                    if let Some(slug) = event.extract_slug() {
+                                        println!("{}", format!("Looking up API ID for event: {} (slug: {})", event.summary, slug).blue());
+                                        
+                                        let api_id = rt.block_on(async {
+                                            api_client.lookup_event_id(&slug).await
+                                        });
+                                        
+                                        match api_id {
+                                            Ok(id) => {
+                                                println!("{}", format!("Found API ID: {}", id).green());
+                                                event.api_id = Some(id);
+                                                
+                                                // Save the updated event
+                                                if let Err(e) = db.save_event(event) {
+                                                    println!("{}", format!("Failed to save event: {}", e).red());
+                                                    error_count += 1;
+                                                } else {
+                                                    println!("{}", "Event updated successfully".green());
+                                                    success_count += 1;
+                                                }
+                                            },
+                                            Err(e) => {
+                                                println!("{}", format!("API lookup failed for {}: {}", slug, e).red());
+                                                error_count += 1;
+                                            }
+                                        }
+                                        
+                                        // Add a small delay to respect rate limits
+                                        std::thread::sleep(std::time::Duration::from_millis(500));
+                                    } else {
+                                        println!("{}", format!("Could not extract slug from URL for event: {}", event.summary).yellow());
+                                    }
+                                }
+                                
+                                println!("{}", format!("API enrichment complete. Success: {}, Errors: {}", success_count, error_count).blue());
+                            }
+                        }
+                        Err(e) => println!("{}", format!("Failed to fetch events from database: {}", e).red()),
                     }
                 }
                 Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),

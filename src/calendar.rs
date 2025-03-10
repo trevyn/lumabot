@@ -51,6 +51,8 @@ pub fn fetch_and_parse_calendar(url: &str) -> Result<Vec<Event>, CalendarError> 
 /// Parses events from a calendar
 fn parse_calendar_events(calendar: &IcalCalendar) -> Result<Vec<Event>, CalendarError> {
     let mut events = Vec::new();
+    // Calculate the date that is two days ago from now
+    let two_days_ago = Utc::now() - chrono::Duration::days(2);
 
     for component in &calendar.events {
         // Extract event properties
@@ -153,15 +155,18 @@ fn parse_calendar_events(calendar: &IcalCalendar) -> Result<Vec<Event>, Calendar
         let start_time = parse_ical_datetime(&start)?;
         let end_time = parse_ical_datetime(&end)?;
 
-        // Create a new event
-        events.push(Event::new(
-            summary,
-            description,
-            location,
-            start_time,
-            end_time,
-            url,
-        ));
+        // Filter out events that ended more than two days ago
+        if end_time >= two_days_ago {
+            // Create a new event
+            events.push(Event::new(
+                summary,
+                description,
+                location,
+                start_time,
+                end_time,
+                url,
+            ));
+        }
     }
 
     Ok(events)

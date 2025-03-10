@@ -6,7 +6,7 @@ authors = ["Your Name <your.email@example.com>"]
 description = "A CLI application that fetches, processes, and displays Luma calendar events"
 
 [dependencies]
-reqwest = { version = "0.11", features = ["blocking"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
 ical = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 time = "0.3"
