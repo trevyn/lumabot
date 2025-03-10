@@ -11,6 +11,10 @@ cargo run -- next 14      # Show events for next 14 days
 cargo run -- db --all     # Show all events from database
 cargo run -- api          # Enrich database events with API data
 cargo run -- lookup --slug <SLUG>  # Test API lookup for a specific event
+cargo run -- add --event-id <EVENT_ID>  # Add an event to your calendar using its API ID
+cargo run -- sync         # Full sync: fetch, store, enrich and add events to calendar
+cargo run -- sync --days 14  # Sync events for the next 14 days only
+cargo run -- sync --skip-add  # Sync but skip adding events to calendar
 cargo check               # Check for errors without building
 cargo clippy              # Lint code
 cargo test                # Run all tests

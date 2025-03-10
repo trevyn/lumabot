@@ -58,27 +58,7 @@ impl Event {
         }
     }
     
-    // Create an event with an existing UID (typically from database)
-    pub fn with_uid(
-        summary: String,
-        description: Option<String>,
-        location: Option<String>,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-        url: Option<String>,
-        event_uid: String,
-    ) -> Self {
-        Self {
-            summary,
-            description,
-            location,
-            start,
-            end,
-            url,
-            event_uid,
-            api_id: None,
-        }
-    }
+    // Function removed to eliminate unused code warning
     
     // Create an event with an existing UID and API ID
     pub fn with_uid_and_api_id(
@@ -145,11 +125,7 @@ impl Event {
         None
     }
     
-    // Set the API ID for this event
-    pub fn with_api_id(mut self, api_id: String) -> Self {
-        self.api_id = Some(api_id);
-        self
-    }
+    // Function removed to eliminate unused code warning
     
     // Calculate the duration of the event in minutes
     pub fn duration_minutes(&self) -> i64 {

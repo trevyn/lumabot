@@ -1,11 +1,12 @@
 use crate::errors::CalendarError;
 use crate::models::Event;
 use reqwest::{Client, StatusCode, header};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::time::Duration;
 use std::env;
 
 const API_ENDPOINT: &str = "https://api.lu.ma/public/v1/entity/lookup?slug=";
+const ADD_EVENT_ENDPOINT: &str = "https://api.lu.ma/public/v1/calendar/add-event";
 const API_KEY_ENV: &str = "LUMA_API_KEY";
 
 /// API handler for interacting with the Luma API
@@ -32,10 +33,7 @@ impl LumaApi {
         }
     }
     
-    /// Check if an API key is available
-    pub fn has_api_key(&self) -> bool {
-        self.api_key.is_some()
-    }
+    // Function removed to eliminate unused code warning
 
     /// Lookup API ID for an event using its slug
     pub async fn lookup_event_id(&self, slug: &str) -> Result<String, CalendarError> {
@@ -120,6 +118,49 @@ impl LumaApi {
         }
         
         results
+    }
+    
+    /// Add an event to a Luma calendar based on its event API ID
+    pub async fn add_event(&self, event_api_id: &str) -> Result<Value, CalendarError> {
+        // Check if API key is available
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            CalendarError::ParseError(format!("No API key available. Set {} environment variable", API_KEY_ENV))
+        })?;
+        
+        // Prepare the request payload
+        let payload = json!({
+            "platform": "luma",
+            "geo_address_json": {
+                "type": "manual"
+            },
+            "event_api_id": event_api_id
+        });
+        
+        // Make the API request
+        let response = self.client
+            .post(ADD_EVENT_ENDPOINT)
+            .header(header::AUTHORIZATION, format!("Bearer {}", api_key))
+            .header(header::CONTENT_TYPE, "application/json")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| {
+                CalendarError::ParseError(format!("API request failed: {}", e))
+            })?;
+        
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => {
+                let json: Value = response.json().await.map_err(|e| {
+                    CalendarError::ParseError(format!("Failed to parse API response: {}", e))
+                })?;
+                
+                Ok(json)
+            },
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(CalendarError::ParseError(format!("API request failed with status: {} - {}", status, error_text)))
+            }
+        }
     }
 }
 
