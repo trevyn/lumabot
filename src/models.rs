@@ -107,17 +107,24 @@ impl Event {
     pub fn extract_slug(&self) -> Option<String> {
         if let Some(url) = &self.url {
             // Look for patterns like https://lu.ma/e/abcdef123 or https://lu.ma/abcdef123
-            if url.contains("lu.ma") {
+            // First, clean the entire URL thoroughly
+            let clean_url = url.replace("\n", "")
+                              .replace("\r", "")
+                              .replace("\t", "")
+                              .trim()
+                              .to_string();
+                              
+            if clean_url.contains("lu.ma") {
                 // Try to extract the slug after the last slash
-                if let Some(slug) = url.split('/').last() {
+                if let Some(slug) = clean_url.split('/').last() {
                     if !slug.is_empty() {
                         return Some(slug.to_string());
                     }
                 }
                 
                 // For URLs with /e/ pattern
-                if url.contains("/e/") {
-                    if let Some(slug) = url.split("/e/").last() {
+                if clean_url.contains("/e/") {
+                    if let Some(slug) = clean_url.split("/e/").last() {
                         if !slug.is_empty() {
                             return Some(slug.to_string());
                         }

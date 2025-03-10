@@ -35,6 +35,10 @@ struct Cli {
     /// Store events in the database
     #[clap(short, long)]
     store: bool,
+    
+    /// Auto-enrich events with API IDs while storing
+    #[clap(short = 'e', long)]
+    enrich: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -131,8 +135,12 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     let mut new_event = e.clone();
                     // Clean the URL if it exists or add a default one
                     if let Some(url) = &e.url {
-                        // Clean existing URL
-                        let clean_url = url.replace("\n", "").replace("\r", "").trim().to_string();
+                        // Thoroughly clean existing URL - remove ALL whitespace and newlines
+                        let clean_url = url.replace("\n", "")
+                                           .replace("\r", "")
+                                           .replace("\t", "")
+                                           .trim()
+                                           .to_string();
                         new_event.url = Some(clean_url);
                     } else {
                         // Add a default URL pattern: https://lu.ma/e/{event_uid}
@@ -142,10 +150,82 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     new_event
                 }).collect();
                 
-                // Save events with clean URLs (using ON CONFLICT DO NOTHING to prevent duplicates)
-                match db.save_events(&events_with_clean_urls) {
-                    Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
-                    Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
+                // Auto-enrich events with API IDs if --enrich is set
+                if cli.enrich {
+                    println!("{}", "Auto-enriching events with API IDs...".blue());
+                    
+                    // Set up Tokio runtime for async operations
+                    let rt = match Runtime::new() {
+                        Ok(runtime) => runtime,
+                        Err(e) => {
+                            println!("{}", format!("Failed to create async runtime: {}", e).red());
+                            return Err(CalendarError::ParseError(format!("Failed to create runtime: {}", e)));
+                        }
+                    };
+                    
+                    // Create API client
+                    let api_client = LumaApi::new();
+                    
+                    // Create a vector to hold enriched events
+                    let mut enriched_events = Vec::new();
+                    let mut success_count = 0;
+                    let mut error_count = 0;
+                    
+                    for event in events_with_clean_urls.iter() {
+                        let mut enriched_event = event.clone();
+                        
+                        // Skip events that already have an API ID
+                        if enriched_event.api_id.is_some() {
+                            println!("{}", format!("Event already has API ID: {}", enriched_event.summary).yellow());
+                            enriched_events.push(enriched_event);
+                            continue;
+                        }
+                        
+                        // Extract slug from URL
+                        if let Some(slug) = enriched_event.extract_slug() {
+                            // Make sure the slug is clean in the log message
+                            let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                            println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", enriched_event.summary, clean_slug).blue());
+                            
+                            let api_id = rt.block_on(async {
+                                api_client.lookup_event_id(&slug).await
+                            });
+                            
+                            match api_id {
+                                Ok(id) => {
+                                    println!("{}", format!("Found API ID: {}", id).green());
+                                    enriched_event.api_id = Some(id);
+                                    success_count += 1;
+                                },
+                                Err(e) => {
+                                    let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                    println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
+                                    error_count += 1;
+                                }
+                            }
+                            
+                            // Add a small delay to respect rate limits
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        } else {
+                            println!("{}", format!("Could not extract slug from URL for event: {}", enriched_event.summary).yellow());
+                        }
+                        
+                        enriched_events.push(enriched_event);
+                    }
+                    
+                    println!("{}", format!("API enrichment complete. Success: {}, Errors: {}", success_count, error_count).blue());
+                    
+                    // Save enriched events with API IDs
+                    match db.save_events(&enriched_events) {
+                        Ok(count) => println!("{}", format!("Stored {} new or updated events", count).green()),
+                        Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
+                    }
+                } else {
+                    // Save events with clean URLs without enrichment
+                    match db.save_events(&events_with_clean_urls) {
+                        Ok(count) => println!("{}", format!("Stored {} new events", count).green()),
+                        Err(e) => println!("{}", format!("Failed to store events: {}", e).red()),
+                    }
                 }
             }
             Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
@@ -229,7 +309,10 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     println!("{}", format!("✅ Successfully found API ID: {}", id).green());
                     println!("{}", "This API ID can be used to access additional event details.".yellow());
                 },
-                Err(e) => println!("{}", format!("❌ API lookup failed: {}", e).red()),
+                Err(e) => {
+                    let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                    println!("{}", format!("❌ API lookup failed for '{}': {}", clean_slug, e).red());
+                },
             }
         }
         Some(Commands::EnrichApi { limit, slug }) => {
@@ -295,7 +378,10 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                             println!("{}", format!("No event found with slug: {}", specific_slug).yellow());
                                         }
                                     },
-                                    Err(e) => println!("{}", format!("API lookup failed: {}", e).red()),
+                                    Err(e) => {
+                                        let clean_slug = specific_slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                        println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
+                                    },
                                 }
                             } else {
                                 // Process all events
@@ -312,7 +398,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                     
                                     // Extract slug from URL
                                     if let Some(slug) = event.extract_slug() {
-                                        println!("{}", format!("Looking up API ID for event: {} (slug: {})", event.summary, slug).blue());
+                                        let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                        println!("{}", format!("Looking up API ID for event: {} (slug: '{}')", event.summary, clean_slug).blue());
                                         
                                         let api_id = rt.block_on(async {
                                             api_client.lookup_event_id(&slug).await
@@ -333,7 +420,8 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                                                 }
                                             },
                                             Err(e) => {
-                                                println!("{}", format!("API lookup failed for {}: {}", slug, e).red());
+                                                let clean_slug = slug.replace("\n", "").replace("\r", "").replace("\t", "").trim().to_string();
+                                                println!("{}", format!("API lookup failed for '{}': {}", clean_slug, e).red());
                                                 error_count += 1;
                                             }
                                         }

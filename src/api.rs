@@ -44,7 +44,14 @@ impl LumaApi {
             CalendarError::ParseError(format!("No API key available. Set {} environment variable", API_KEY_ENV))
         })?;
         
-        let url = format!("{}{}", API_ENDPOINT, slug);
+        // Clean the slug thoroughly before using it in the URL
+        let clean_slug = slug.replace("\n", "")
+                          .replace("\r", "")
+                          .replace("\t", "")
+                          .trim()
+                          .to_string();
+        
+        let url = format!("{}{}", API_ENDPOINT, clean_slug);
         
         let response = self.client
             .get(&url)
