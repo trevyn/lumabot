@@ -84,6 +84,14 @@ enum Commands {
         #[clap(short, long)]
         slug: Option<String>,
     },
+    
+    /// Test API lookup without database operations
+    #[clap(name = "lookup")]
+    TestLookup {
+        /// The slug to lookup (required)
+        #[clap(short, long)]
+        slug: String,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -200,6 +208,28 @@ fn run(cli: Cli) -> Result<(), CalendarError> {
                     }
                 }
                 Err(e) => println!("{}", format!("Database connection failed: {}", e).red()),
+            }
+        }
+        Some(Commands::TestLookup { slug }) => {
+            // Set up Tokio runtime for async operations
+            let rt = Runtime::new().map_err(|e| {
+                CalendarError::ParseError(format!("Failed to create runtime: {}", e))
+            })?;
+            
+            // Create API client
+            let api_client = LumaApi::new();
+            
+            println!("{}", format!("Looking up API ID for slug: {}", slug).blue());
+            let api_id = rt.block_on(async {
+                api_client.lookup_event_id(slug).await
+            });
+            
+            match api_id {
+                Ok(id) => {
+                    println!("{}", format!("✅ Successfully found API ID: {}", id).green());
+                    println!("{}", "This API ID can be used to access additional event details.".yellow());
+                },
+                Err(e) => println!("{}", format!("❌ API lookup failed: {}", e).red()),
             }
         }
         Some(Commands::EnrichApi { limit, slug }) => {

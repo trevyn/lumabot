@@ -142,9 +142,11 @@ impl Database {
             DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e))
         })?;
 
-        // Use client if available, otherwise get a new connection from pool
-        if let Some(ref client) = self.client {
-            // If we have a client already, use it
+        // Always get a fresh connection from the pool to avoid "connection closed" errors
+        rt.block_on(async {
+            let client = self.pool.get().await
+                .map_err(|e| DatabaseError::ConnectionError(format!("Failed to get connection from pool: {}", e)))?;
+            
             // Clean URL if it exists - thoroughly clean any URL to ensure no newlines or invalid characters
             let clean_url = match &event.url {
                 Some(url) => {
@@ -160,29 +162,40 @@ impl Database {
                 None => None
             };
             
-            rt.block_on(async {
-                client
-                    .execute(
-                        "INSERT INTO events (summary, description, location, start_time, end_time, url, event_uid, api_id)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                         ON CONFLICT (event_uid) DO UPDATE SET api_id = $8 WHERE events.api_id IS NULL",
-                        &[
-                            &event.summary,
-                            &event.description,
-                            &event.location,
-                            &event.start,
-                            &event.end,
-                            &clean_url,
-                            &event.event_uid,
-                            &event.api_id,
-                        ],
-                    )
-                    .await
-            })
-            .map_err(DatabaseError::QueryError)?;
-        } else {
-            // Get a fresh connection from the pool
-            rt.block_on(async {
+            client
+                .execute(
+                    "INSERT INTO events (summary, description, location, start_time, end_time, url, event_uid, api_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                     ON CONFLICT (event_uid) DO UPDATE SET api_id = $8 WHERE events.api_id IS NULL OR events.api_id = ''",
+                    &[
+                        &event.summary,
+                        &event.description,
+                        &event.location,
+                        &event.start,
+                        &event.end,
+                        &clean_url,
+                        &event.event_uid,
+                        &event.api_id,
+                    ],
+                )
+                .await
+                .map_err(DatabaseError::QueryError)
+        })?;
+
+        Ok(())
+    }
+
+    /// Saves a list of events to the database
+    pub fn save_events(&self, events: &[Event]) -> Result<usize, DatabaseError> {
+        let rt = Runtime::new().map_err(|e| {
+            DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e))
+        })?;
+
+        let mut saved_count = 0;
+        for event in events {
+            // Get a fresh connection for each event to avoid "connection closed" errors
+            // during long batch operations
+            let result = rt.block_on(async {
                 let client = self.pool.get().await
                     .map_err(|e| DatabaseError::ConnectionError(format!("Failed to get connection from pool: {}", e)))?;
                 
@@ -205,7 +218,7 @@ impl Database {
                     .execute(
                         "INSERT INTO events (summary, description, location, start_time, end_time, url, event_uid, api_id)
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                         ON CONFLICT (event_uid) DO UPDATE SET api_id = $8 WHERE events.api_id IS NULL",
+                         ON CONFLICT (event_uid) DO UPDATE SET api_id = $8 WHERE events.api_id IS NULL OR events.api_id = ''",
                         &[
                             &event.summary,
                             &event.description,
@@ -219,59 +232,6 @@ impl Database {
                     )
                     .await
                     .map_err(DatabaseError::QueryError)
-            })?;
-        }
-
-        Ok(())
-    }
-
-    /// Saves a list of events to the database
-    pub fn save_events(&self, events: &[Event]) -> Result<usize, DatabaseError> {
-        let rt = Runtime::new().map_err(|e| {
-            DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e))
-        })?;
-
-        // Get a fresh connection from the pool for the batch operation
-        let client = rt.block_on(async {
-            self.pool.get().await
-                .map_err(|e| DatabaseError::ConnectionError(format!("Failed to get connection from pool: {}", e)))
-        })?;
-
-        let mut saved_count = 0;
-        for event in events {
-            // Clean URL if it exists - thoroughly clean any URL to ensure no newlines or invalid characters
-            let clean_url = match &event.url {
-                Some(url) => {
-                    // More thorough cleaning to handle any potentially problematic characters
-                    let cleaned = url.replace('\n', "")
-                                    .replace('\r', "")
-                                    .replace("\\n", "")
-                                    .replace("\\r", "")
-                                    .trim()
-                                    .to_string();
-                    Some(cleaned)
-                },
-                None => None
-            };
-            
-            let result = rt.block_on(async {
-                client
-                    .execute(
-                        "INSERT INTO events (summary, description, location, start_time, end_time, url, event_uid, api_id)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                         ON CONFLICT (event_uid) DO UPDATE SET api_id = $8 WHERE events.api_id IS NULL",
-                        &[
-                            &event.summary,
-                            &event.description,
-                            &event.location,
-                            &event.start,
-                            &event.end,
-                            &clean_url,
-                            &event.event_uid,
-                            &event.api_id,
-                        ],
-                    )
-                    .await
             });
 
             match result {

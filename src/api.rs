@@ -61,12 +61,17 @@ impl LumaApi {
                     CalendarError::ParseError(format!("Failed to parse API response: {}", e))
                 })?;
                 
-                // Extract the API ID from the response
-                if let Some(api_id) = json.get("id").and_then(|id| id.as_str()) {
-                    Ok(api_id.to_string())
-                } else {
-                    Err(CalendarError::ParseError("API ID not found in response".to_string()))
+                // Extract the API ID from the response path: entity.event.api_id
+                if let Some(entity) = json.get("entity") {
+                    if let Some(event) = entity.get("event") {
+                        if let Some(api_id) = event.get("api_id").and_then(|id| id.as_str()) {
+                            return Ok(api_id.to_string());
+                        }
+                    }
                 }
+                
+                // If we reach here, the API ID wasn't found
+                Err(CalendarError::ParseError("API ID not found in response".to_string()))
             },
             status => {
                 Err(CalendarError::ParseError(format!("API request failed with status: {}", status)))
