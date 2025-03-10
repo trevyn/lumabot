@@ -15,6 +15,7 @@ pub enum CalendarError {
     DatabaseError(#[from] tokio_postgres::Error),
     
     #[error("Error loading environment variable: {0}")]
+    #[allow(dead_code)]
     EnvError(String),
     
     #[error("I/O error: {0}")]
@@ -30,8 +31,10 @@ pub enum DatabaseError {
     QueryError(#[from] tokio_postgres::Error),
     
     #[error("Error loading environment variable: {0}")]
+    #[allow(dead_code)]
     EnvError(String),
     
     #[error("Data conversion error: {0}")]
+    #[allow(dead_code)]
     DataConversionError(String),
 }

@@ -11,6 +11,7 @@ pub struct Event {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
     pub url: Option<String>,
+    pub event_uid: String,
 }
 
 impl Event {
@@ -22,6 +23,28 @@ impl Event {
         end: DateTime<Utc>,
         url: Option<String>,
     ) -> Self {
+        // Generate a deterministic ID for the event based on its content
+        // This will create the same ID for the same event each time
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        summary.hash(&mut hasher);
+        start.timestamp().hash(&mut hasher);
+        if let Some(desc) = &description {
+            desc.hash(&mut hasher);
+        }
+        if let Some(loc) = &location {
+            loc.hash(&mut hasher);
+        }
+        
+        let hash = hasher.finish();
+        
+        let event_uid = format!("{}-{}-{:x}", 
+                               summary.replace(" ", "_"), 
+                               start.timestamp(),
+                               hash);
+
         Self {
             summary,
             description,
@@ -29,6 +52,28 @@ impl Event {
             start,
             end,
             url,
+            event_uid,
+        }
+    }
+    
+    // Create an event with an existing UID (typically from database)
+    pub fn with_uid(
+        summary: String,
+        description: Option<String>,
+        location: Option<String>,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        url: Option<String>,
+        event_uid: String,
+    ) -> Self {
+        Self {
+            summary,
+            description,
+            location,
+            start,
+            end,
+            url,
+            event_uid,
         }
     }
     
